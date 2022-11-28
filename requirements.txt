@@ -1,0 +1,2 @@
+sentence-transformers==2.2.2
+tf-agents==0.13.0
