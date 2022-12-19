@@ -1,11 +1,10 @@
 
-import json
 import re
-from datetime import datetime
-
+from time import sleep
 from SPARQLWrapper import SPARQLWrapper, JSON
 
 def kb_query(_query, kb_endpoint):
+    sleep(1.0)
     sparql = SPARQLWrapper(kb_endpoint)
     sparql.setQuery(_query)
     sparql.setReturnFormat(JSON)
@@ -13,20 +12,10 @@ def kb_query(_query, kb_endpoint):
     results = parse_query_results(response)
     return results
 
-
-def query_ent_label(x, kb_endpoint, lang="en"):
-    query = "PREFIX wd: <http://www.wikidata.org/entity/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT * WHERE { wd:"+x+" rdfs:label ?label . filter(lang(?label) = '"+lang+"') }"
-    result = kb_query(query, kb_endpoint)
-    if len(result) == 0:
-        print(x, "does not have {0} label !".format(lang))
-        return x
-    label = result[0]["label"]
-    return label
-
 def parse_query_results(response):
 
     if "boolean" in response:  # ASK
-        results = ["Yes"] if response["boolean"] else ["No"]
+        results = [response["boolean"]]
     else:
         if len(response["results"]["bindings"]) > 0 and "callret-0" in response["results"]["bindings"][0]: # COUNT
             results = [int(response['results']['bindings'][0]['callret-0']['value'])]
@@ -36,6 +25,7 @@ def parse_query_results(response):
                 res = {k: v["value"] for k, v in res.items()}
                 results.append(res)
     return results
+
 
 def formalize(query):
     p_where = re.compile(r'[{](.*?)[}]', re.S)
@@ -52,6 +42,7 @@ def formalize(query):
     where_clause = " . ".join(triples)
     query = select_clause + "{ " + where_clause + " }"
     return query
+
 
 def query_answers(query, kb_endpoint):
     query = formalize(query)
