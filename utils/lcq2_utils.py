@@ -1,17 +1,67 @@
-
+import re
+import json
 import KB_query
+import utils
 
-def get_ent_label(answers, kb_endpoint):
-    gold_answer_texts = []
+# with open("../data/labels_dict.json") as labelFile:
+#    labels_dict = json.load(labelFile)
 
-    for ans in answers:
-        if type(ans) == bool:
-            gold_answer_texts.append(str(ans))
-            continue
-        label = KB_query.query_ent_label(ans, kb_endpoint)
-        gold_answer_texts.append(label)
 
-    return gold_answer_texts
+with open("../processed_data/labels_dict.json") as labelFile:
+    labels_dict = json.load(labelFile)
+
+PREFIXES_WIKIDATA = {
+    " p:": "PREFIX p: <http://www.wikidata.org/prop/>",
+    "wdt:": "PREFIX wdt: <http://www.wikidata.org/prop/direct/>",
+    "wd:": "PREFIX wd: <http://www.wikidata.org/entity/>",
+    "xsd:": "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
+    "pq:": "PREFIX pq: <http://www.wikidata.org/prop/qualifier/>",
+    "ps:": "PREFIX ps: <http://www.wikidata.org/prop/statement/>",
+    "rdfs:": "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>"
+}
+
+
+# def get_ent_label(answers):
+#     gold_answer_texts = []
+#
+#     for ans in answers:
+#         if type(ans) == bool:
+#             gold_answer_texts.append(str(ans))
+#             continue
+#
+#         if re.match(utils.ENTITY_PATTERN, ans) or re.match(utils.PREDICATE_PATTERN, ans):
+#             label = KB_query.query_ent_label(ans, kb_endpoint)
+#         else:
+#             if utils.is_timestamp(ans):
+#                 label = utils.convertTimestamp(ans)
+#             elif ans.startswith("+"):
+#                 label = ans.split("+")[1]
+#             else:
+#                 label = ans
+#         gold_answer_texts.append(label)
+#
+#     return gold_answer_texts
+
+
+def getLabel(entity):
+    label = ""
+    if entity.startswith("Q") or entity.startswith("P"):
+            #for predicates: P10-23, split away counting
+        if "-" in entity:
+            e = entity.split("-") [0]
+        else:
+            e = entity
+        if e in labels_dict.keys():
+            label = labels_dict[e]
+    else:
+        if utils.is_timestamp(entity):
+            label = utils.convertTimestamp(entity)
+        elif entity.startswith("+"):
+            label = entity.split("+")[1]
+        else:
+            label = entity
+
+    return label
 
 
 def get_gold_answers(answers):

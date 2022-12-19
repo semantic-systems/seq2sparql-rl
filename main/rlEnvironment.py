@@ -22,7 +22,8 @@ class RLEnvironment(py_environment.PyEnvironment):
                  all_actions,
                  action_nbrs,
                  all_answers,
-                 paths):
+                 paths,
+                 alt_reward):
         """
         :param observation_spec: observeration specification
         :param action_spec: action specification
@@ -39,14 +40,20 @@ class RLEnvironment(py_environment.PyEnvironment):
         self._observation_spec = observation_spec
         self._action_spec = action_spec
         self.questionIds = questionIds
-        self.all_questions = all_questions
         self.all_answers = all_answers
         self.q_start_indices = q_start_indices
+        self.all_questions = all_questions
+        self.all_actions = all_actions
         self.number_of_actions = action_nbrs
+
+        self.starts_per_question = starts_per_question
+        self.question_counter = 0
 
         self.paths = paths
         self.final_obs = False
         self._batch_size = 1
+
+        self.alt_reward = alt_reward
 
         super(RLEnvironment, self).__init__()
 
@@ -74,9 +81,39 @@ class RLEnvironment(py_environment.PyEnvironment):
         """Returns an observation"""
         # we want to go over each question, and for each question over each possible starting point
 
+        if self.question_counter == len(self.q_start_indices):
+            print("end of training samples: empty observation returned.")
+            self.final_obs = True
+            return self._empty_observation()
 
+        # get next training ids for question and startpoints
+        q_counter, start_counter = self.q_start_indices[self.question_counter]
+        self.qId = self.questionIds[q_counter]
 
-        return None
+        self.start_id = self.starts_per_question[self.qId][start_counter]
+        self.question_counter += 1
+
+        # get pre-computed bert embeddings for the question
+        encoded_question = self.all_questions[self.qId]
+
+        # get action embeddings
+        encoded_actions = self.all_actions[self.start_id]
+        action_nbr = self.number_of_actions[self.start_id]
+
+        mask = tf.ones(action_nbr)
+        zeros = tf.zeros((1001-action_nbr))
+        mask = tf.keras.layers.concatenate([mask, zeros], axis=0)
+        mask = tf.expand_dims(mask, 0)
+        mask = tf.expand_dims(mask, -1) # [1,1001,1]
+
+        # put them together as next observation for the policy network
+        observation = tf.keras.layers.concatenate([encoded_question, encoded_actions], axis=0) # [1001, 768]
+        observation = tf.expand_dims(observation, 0) # [1, 1001, 768]
+        observation = tf.keras.layers.concatenate([observation, mask], axis=2) #[1, 1001, 769]
+        tf.dtypes.cast(observation, tf.float32)
+
+        return observation
+
 
     def _reset(self):
         self._done = False
@@ -98,6 +135,7 @@ class RLEnvironment(py_environment.PyEnvironment):
         self.start_id = ""
         self.topActions = []
         self.rollout = False
+        self.question_counter = 0
 
 
     def _apply_action(self, action):
@@ -119,8 +157,7 @@ class RLEnvironment(py_environment.PyEnvironment):
         else:
             if self.alt_reward:
                 return [-1.0]
-
-        return [0.0]
+            return [0.0]
 
     def _step(self, action):
 

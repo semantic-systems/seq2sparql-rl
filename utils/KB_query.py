@@ -15,7 +15,7 @@ def kb_query(_query, kb_endpoint):
 
 
 def query_ent_label(x, kb_endpoint, lang="en"):
-    query = "SELECT * WHERE { wd:"+x+" rdfs:label ?label . filter(lang(?label) = '"+lang+"') }"
+    query = "PREFIX wd: <http://www.wikidata.org/entity/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT * WHERE { wd:"+x+" rdfs:label ?label . filter(lang(?label) = '"+lang+"') }"
     result = kb_query(query, kb_endpoint)
     if len(result) == 0:
         print(x, "does not have {0} label !".format(lang))
@@ -23,22 +23,10 @@ def query_ent_label(x, kb_endpoint, lang="en"):
     label = result[0]["label"]
     return label
 
-def query_ent_name(x, kb_endpoint):
-    query = "PREFIX ns: <http://rdf.freebase.com/ns/> SELECT ?name WHERE { " + x + " ns:type.object.name ?name .}"
-    results = kb_query(query, kb_endpoint)
-    if len(results) == 0:
-        query = "PREFIX ns: <http://rdf.freebase.com/ns/> SELECT ?name WHERE { " + x + " ns:common.topic.alias ?name .}"
-        results = kb_query(query, kb_endpoint)
-        if len(results) == 0:
-            print(x, "does not have name !")
-            return x
-    name = results[0]["name"]
-    return name
-
 def parse_query_results(response):
 
     if "boolean" in response:  # ASK
-        results = [response["boolean"]]
+        results = ["Yes"] if response["boolean"] else ["No"]
     else:
         if len(response["results"]["bindings"]) > 0 and "callret-0" in response["results"]["bindings"][0]: # COUNT
             results = [int(response['results']['bindings'][0]['callret-0']['value'])]
@@ -87,8 +75,8 @@ def query_answers(query, kb_endpoint):
 
 if __name__ == '__main__':
 
-    # query_1 = "ASK WHERE { " \
-    #           "<http://dbpedia.org/resource/James_Watt> <http://dbpedia.org/ontology/field> <http://dbpedia.org/resource/Mechanical_engineering> }"
+    query_1 = "ASK WHERE { " \
+               "<http://dbpedia.org/resource/James_Watt> <http://dbpedia.org/ontology/field> <http://dbpedia.org/resource/Mechanical_engineering> }"
     # query_2 = "SELECT DISTINCT COUNT(?uri) WHERE { " \
     #           "?x <http://dbpedia.org/property/partner> <http://dbpedia.org/resource/Dolores_del_R\u00edo> . " \
     #           "?uri <http://dbpedia.org/property/director> ?x  . " \
@@ -98,8 +86,8 @@ if __name__ == '__main__':
     #           "?uri <http://dbpedia.org/property/director> ?x  . " \
     #           "?uri <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://dbpedia.org/ontology/Film>}"
 
-    query_4 = "SELECT ?obj WHERE { wd:Q213611 p:P1411 ?s . ?s ps:P1411 ?obj . ?s pq:P805 wd:Q917076 }"
+    #query_4 = "SELECT ?obj WHERE { wd:Q213611 p:P1411 ?s . ?s ps:P1411 ?obj . ?s pq:P805 wd:Q917076 }"
 
-    #kb_endpoint = "http://localhost:12345/dbpedia/sparql"
-    kb_endpoint = "https://query.wikidata.org/sparql"
-    kb_query(query_4, kb_endpoint)
+    kb_endpoint = "https://skynet.coypu.org/dbpedia/"
+    #kb_endpoint = "https://query.wikidata.org/sparql"
+    kb_query(query_1, kb_endpoint)

@@ -1,0 +1,27 @@
+{
+    "seed":12345,
+    "entropy_const": 0.1,
+    "learning_rate": 1e-3,
+    "num_episodes": 50,
+    "num_rollouts": 20,
+    "num_epochs": 10,
+    "fractional_reward": false,
+    "negative_reward": true,
+    "observation_spec_shape_x": 1001,
+    "observation_spec_shape_y": 769,
+
+    "checkpoint_path": "../checkpoints/main_exp/train",
+
+    "starts_per_question": "../processed_data/LC-QuAD2/train_data/reachable_startpoints_trainset.json",
+    "question_list": "../processed_data/LC-QuAD2/train_data/questionId_list_trainset.json",
+    "paths": "../processed_data/LC-QuAD2/train_data/contextPaths_trainset.json",
+    "answers": "../processed_data/LC-QuAD2/train_data/all_answers_trainset.json",
+    "questions": "../processed_data/LC-QuAD2/train_data/all_questions_trainset.json",
+    "action_nbrs": "../processed_data/LC-QuAD2/train_data/action_numbers_trainset.json",
+    "q_start_indices": "../processed_data/LC-QuAD2/train_data/question_start_indices_trainset.json",
+    "encoded_questions": "../processed_data/LC-QuAD2/train_data/encoded_questions_trainset.pickle",
+    "encoded_actions": "../processed_data/LC-QuAD2/train_data/encoded_paths_trainset.pickle"
+
+}
+
+

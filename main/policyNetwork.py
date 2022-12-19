@@ -70,16 +70,7 @@ class KGActionDistNet(network.DistributionNetwork):
         # get individual parts of observations: action mask, optional history embeddings, question and actions
         observations, mask = tf.split(observations, [768, 1], 2)
 
-        if observations.shape[1] == 1001:
-            with_history = False
-            observations, actions = tf.split(observations, [1, 1000], 1) # 2x[batchsize, 1, 768], 1x[batchsize, 1000, 768]
-        elif observations.shape[1] == 1002:
-            with_history = True
-            history, question, actions = tf.split(observations, [1, 1, 1000], 1) # 3x[batchsize, 1, 768], 1x[batchsize, 1000, 768]
-
-        if with_history:
-            observations = tf.keras.layers.concatenate([history, question], axis=2)
-
+        observations, actions = tf.split(observations, [1, 1000], 1) # 2x[batchsize, 1, 768], 1x[batchsize, 1000, 768]
         observations = tf.squeeze(observations, axis=1)
         availableActions = tf.transpose(actions, perm=[0, 2, 1]) # [batchsize, 768, 1000]
 
@@ -97,10 +88,7 @@ class KGActionDistNet(network.DistributionNetwork):
         mask = tf.math.not_equal(mask, mask_zero)
         mask = tf.transpose(mask)
 
-        if with_history:
-            mask = mask[:-2]
-        else:
-            mask = mask[:-1]
+        mask = mask[:-1]
 
         mask = tf.transpose(mask)
 
