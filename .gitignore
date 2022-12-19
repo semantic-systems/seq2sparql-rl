@@ -133,3 +133,4 @@ dmypy.json
 
 # Data Files
 data/
+KGQA-datasets/
