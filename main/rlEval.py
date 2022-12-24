@@ -183,6 +183,7 @@ def call_rl(timesteps, start_ids):
             if len(answerpath) < 3:
                 answers[start_ids[i]].append("")
                 continue
+            print("Answer path: ", answerpath)
             answer = answerpath[2]
             answers[start_ids[i]].append(answer)
     return (answers, top_log_scores.numpy())
@@ -354,8 +355,8 @@ if __name__ == '__main__':
         header = "QID,QUESTION,ANSWER,GOLD_ANSWER,PRECISION@1,HITS@5,MRR" + "\n"
         resFile.write(header)
 
-        with open("../processed_data/LC-QuAD2/test_data/all_questions_testset.json", "r") as q_file:
-            with open("../processed_data/LC-QuAD2/test_data/all_answers_testset.json", "r") as a_file:
+        with open("../data/LC-QuAD2/test_data/all_questions_testset.json", "r") as q_file:
+            with open("../data/LC-QuAD2/test_data/all_answers_testset.json", "r") as a_file:
                 questionList = json.load(q_file)
                 gold_answerList = json.load(a_file)
 

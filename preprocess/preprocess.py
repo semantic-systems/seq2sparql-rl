@@ -1,12 +1,11 @@
-import re
-import os
 import sys
-sys.path.append("../utils")
+sys.path.append("..")
+
+import os
 import json
 import argparse
 from time import sleep
-import KB_query
-import utils
+from utils import KB_query, utils
 
 
 PREFIXES_WIKIDATA = {
@@ -34,8 +33,6 @@ def preprocess_lcq2(data, kb_endpoint):
     idx = 0
 
     while len(data) != 0:
-
-        sleep(1.0)
 
         question_info = data.pop(0)
         question_string = question_info["question"]

@@ -1,4 +1,6 @@
 import sys
+sys.path.append("..")
+
 import json
 import re
 import numpy as np

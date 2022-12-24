@@ -8,13 +8,13 @@
     "checkpoint_path": "../checkpoints/main_exp/train",
     "checkpoint_nbr" : 10,
 
-    "startpoints": "../processed_data/LC-QuAD2/test_data/startPoints_testset.json",
-    "contextPaths": "../processed_data/LC-QuAD2/test_data/contextPaths_testset.json",
-    "labels_dict": "../processed_data/labels_dict.json",
+    "startpoints": "../data/LC-QuAD2/test_data/startPoints_testset.json",
+    "contextPaths": "../data/LC-QuAD2/test_data/contextPaths_testset.json",
+    "labels_dict": "../data/labels_dict.json",
 
-    "bert_questions": "../processed_data/LC-QuAD2/test_data/encoded_questions_testset.pickle",
-    "bert_actions": "../processed_data/LC-QuAD2/test_data/encoded_paths_testset.pickle",
-    "action_nbrs": "../processed_data/LC-QuAD2/test_data/action_numbers_testset.json"
+    "bert_questions": "../data/LC-QuAD2/test_data/encoded_questions_testset.pickle",
+    "bert_actions": "../data/LC-QuAD2/test_data/encoded_paths_testset.pickle",
+    "action_nbrs": "../data/LC-QuAD2/test_data/action_numbers_testset.json"
 
 
 }

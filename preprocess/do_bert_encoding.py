@@ -1,12 +1,12 @@
-import os
 import sys
+sys.path.append("..")
+
 import json
 import pickle
 import argparse
 import tensorflow as tf
 from transformers import BertTokenizer, TFBertModel
-sys.path.append("../utils")
-import utils
+from utils import utils
 
 """Encode questions and actions with pre-trained BERT model"""
 

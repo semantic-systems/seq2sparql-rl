@@ -45,12 +45,7 @@ class KGActionDistNet(network.DistributionNetwork):
     def get_logits(self):
         return self.logits
 
-    def call(self,
-             observations,
-             step_type,
-             network_state,
-             training=False,
-             mask=None):
+    def call(self, observations, step_type, network_state, training = False, mask = None):
 
         """
         get prediction from policy network
