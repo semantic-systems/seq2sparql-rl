@@ -29,7 +29,6 @@ from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.trajectories import trajectory
 from tf_agents.specs import array_spec, tensor_spec
 from tf_agents.agents import ReinforceAgent
-from tf_agents.trajectories.time_step import StepType
 
 import pickle
 
@@ -44,7 +43,9 @@ entropy_const = config["entropy_const"]
 learning_rate = config["learning_rate"]
 num_episodes = config["num_episodes"]
 num_rollouts = config["num_rollouts"]
+num_rollout_steps = config["num_rollout_steps"]
 num_epochs = config["num_epochs"]
+discount = config["discount"]
 
 # wheter a pretrained model should be used
 if "pretrained" in config.keys():
@@ -107,13 +108,16 @@ kgEnv = RLEnvironment(observation_spec=observation_spec,
                       action_spec=action_spec,
                       all_questions=encoded_questions,
                       all_actions=encoded_actions,
-                      questionIds=question_list,
+                      question_ids=question_list,
                       starts_per_question=starts_per_question,
                       action_nbrs=action_nbrs,
                       all_answers=answers,
                       paths=paths,
                       q_start_indices=q_start_indices,
-                      alt_reward=alt_reward)
+                      alt_reward=alt_reward,
+                      discount=discount,
+                      num_rollouts=num_rollouts,
+                      num_rollout_steps=num_rollout_steps)
 
 train_env = tf_py_environment.TFPyEnvironment(kgEnv)
 optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate)
@@ -148,57 +152,69 @@ replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
 )
 
 
-def collect_episodes_with_rollouts(environment, policy, num_episodes, num_rollouts):
-    episode_counter = 0
+def collect_episodes_with_rollouts(environment, policy, num_episodes, num_rollouts, num_rollout_steps):
     episode_return = 0.0
 
-    while episode_counter < num_episodes:
-        environment.set_is_rollout(False)
+    for episode_counter in range(num_episodes):
+
+        next_time_steps_dict = dict({rollout_step: [] for rollout_step in range(num_rollout_steps+1)})
+
         # we are moving only one step each time
-        time_step = environment.reset()
+        initial_time_step = environment.reset()
 
         if environment.is_final_observation():
-            avg_return = episode_return / ((episode_counter+1)*num_rollouts)
+            avg_return = episode_return / ((episode_counter+1)*num_rollouts*num_rollouts)
             print("final obs")
             return avg_return
 
-        # get back an action given your current state
-        action_step = policy.action(time_step, seed=seed_value)
+        next_time_steps_dict[0].append(initial_time_step)
 
-        # do next step on the environment
-        next_time_step = environment.step(action_step.action)
+        for rollout_step in range(1, num_rollout_steps+1):
 
-        # collect the reward
-        episode_return += next_time_step.reward
-        traj = trajectory.from_transition(time_step, action_step, next_time_step)
+            environment.set_current_rollout_step(rollout_step)
 
-        # store collected experience
-        replay_buffer.add_batch(traj)
+            for prev_time_step in next_time_steps_dict[rollout_step-1]:
+                # get back an action given your current state
+                action_step = policy.action(prev_time_step, seed=seed_value)
+                # do next step on the environment
+                next_time_step = environment.step(action_step.action)
+                # collect the reward
+                episode_return += next_time_step.reward
+                traj = trajectory.from_transition(prev_time_step, action_step, next_time_step)
+                # store collected experience
+                replay_buffer.add_batch(traj)
 
-        # get action distribution from policy network
-        distribution = actor_network.get_distribution()
+                if not next_time_step.is_last():
+                    next_time_steps_dict[rollout_step].append(next_time_step)
 
-        # sample numrollout-1 additional actions
-        selectedActions = tf.nest.map_structure(
-            lambda d: d.sample((num_rollouts-1), seed=seed_value),
-            distribution
-        )
-        #print("selected Actions: ", selectedActions)
+                # get action distribution from policy network
+                distribution = actor_network.get_distribution()
 
-        environment.set_is_rollout(True)
+                # sample numrollout-1 additional actions
+                selectedActions = tf.nest.map_structure(
+                     lambda d: d.sample((num_rollouts-1), seed=seed_value),
+                     distribution
+                )
+                #print("selected Actions: ", selectedActions)
 
-        # get from environment potential new state when alternative action is chosen
-        for selAction in selectedActions:
-            new_policy_step = action_step._replace(action=selAction)
-            next_time_step = environment.step(selAction)
-            episode_return += next_time_step.reward
-            traj = trajectory.from_transition(time_step, new_policy_step, next_time_step)
-            # store additional experience
-            replay_buffer.add_batch(traj)
+                environment.set_is_rollout(True)
 
-        episode_counter += 1
+                # get from environment potential new state when alternative action is chosen
+                for selAction in selectedActions:
+                    new_policy_step = action_step._replace(action=selAction)
+                    next_time_step = environment.step(selAction)
+                    episode_return += next_time_step.reward
+                    traj = trajectory.from_transition(prev_time_step, new_policy_step, next_time_step)
+                    # store additional experience
+                    replay_buffer.add_batch(traj)
+
+                    if not next_time_step.is_last():
+                        next_time_steps_dict[rollout_step].append(next_time_step)
+
+                environment.set_is_rollout(False)
+        environment.next_question_counter()
     # calculate average reward
-    avg_return = episode_return / (num_episodes*num_rollouts)
+    avg_return = episode_return / (num_episodes*num_rollouts*num_rollout_steps)
     return avg_return
 
 # create checkpoint for weights of the policy network
@@ -214,7 +230,7 @@ for j in range(num_epochs):
     while True:
         i += 1
         # collect experience with additional rollouts
-        average_return = collect_episodes_with_rollouts(kgEnv, collect_policy, num_episodes, num_rollouts)
+        average_return = collect_episodes_with_rollouts(kgEnv, collect_policy, num_episodes, num_rollouts, num_rollout_steps)
         experience = replay_buffer.gather_all()
         # calculate loss
         train_loss = rfAgent.train(experience)

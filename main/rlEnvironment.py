@@ -5,6 +5,7 @@ from __future__ import print_function
 import sys
 import numpy as np
 import tensorflow as tf
+from collections import defaultdict
 from tf_agents.environments import py_environment
 from tf_agents.trajectories import time_step as ts
 
@@ -16,19 +17,22 @@ class RLEnvironment(py_environment.PyEnvironment):
                  observation_spec,
                  action_spec,
                  all_questions,
-                 questionIds,
+                 question_ids,
                  starts_per_question,
                  q_start_indices,
                  all_actions,
                  action_nbrs,
                  all_answers,
                  paths,
-                 alt_reward):
+                 alt_reward,
+                 discount,
+                 num_rollouts,
+                 num_rollout_steps):
         """
         :param observation_spec: observeration specification
         :param action_spec: action specification
         :param all_questions: question encodings
-        :param questionIds: list with all question ids
+        :param question_ids: list with all question ids
         :param starts_per_question: context entities per startpoint
         :param q_start_indices: indices for qid and context entity number
         :param all_actions: action encodings
@@ -39,7 +43,7 @@ class RLEnvironment(py_environment.PyEnvironment):
 
         self._observation_spec = observation_spec
         self._action_spec = action_spec
-        self.questionIds = questionIds
+        self.question_ids = question_ids
         self.all_answers = all_answers
         self.q_start_indices = q_start_indices
         self.all_questions = all_questions
@@ -49,11 +53,21 @@ class RLEnvironment(py_environment.PyEnvironment):
         self.starts_per_question = starts_per_question
         self.question_counter = 0
 
+        self.num_rollouts = num_rollouts
+        self.num_rollout_steps = num_rollout_steps
+
         self.paths = paths
-        self.final_obs = False
+        self._is_final_observation = False
+        self._is_right_answer_found = False
         self._batch_size = 1
+        self.current_rollout_step = 0
 
         self.alt_reward = alt_reward
+        self.discount = discount
+
+        self.curr_startpoint_id = ""
+
+        self.reasoning_paths = defaultdict(list)
 
         super(RLEnvironment, self).__init__()
 
@@ -83,22 +97,25 @@ class RLEnvironment(py_environment.PyEnvironment):
 
         if self.question_counter == len(self.q_start_indices):
             print("end of training samples: empty observation returned.")
-            self.final_obs = True
+            self._is_final_observation = True
             return self._empty_observation()
 
         # get next training ids for question and startpoints
         q_counter, start_counter = self.q_start_indices[self.question_counter]
-        self.qId = self.questionIds[q_counter]
-
-        self.start_id = self.starts_per_question[self.qId][start_counter]
-        self.question_counter += 1
+        self.curr_question_id = self.question_ids[q_counter]
 
         # get pre-computed bert embeddings for the question
-        encoded_question = self.all_questions[self.qId]
+        encoded_question = self.all_questions[self.curr_question_id]
+
+        if self.current_rollout_step == 1:
+            self.orig_startpoint_id = self.starts_per_question[self.curr_question_id][start_counter]
+            self.curr_startpoint_id = self.orig_startpoint_id
 
         # get action embeddings
-        encoded_actions = self.all_actions[self.start_id]
-        action_nbr = self.number_of_actions[self.start_id]
+        #encoded_actions = self.all_actions[self.curr_startpoint_id]
+        #action_nbr = self.number_of_actions[self.curr_startpoint_id]
+        encoded_actions = self.all_actions[self.orig_startpoint_id]
+        action_nbr = self.number_of_actions[self.orig_startpoint_id]
 
         mask = tf.ones(action_nbr)
         zeros = tf.zeros((1001-action_nbr))
@@ -116,27 +133,35 @@ class RLEnvironment(py_environment.PyEnvironment):
 
 
     def _reset(self):
-        self._done = False
         obs = self._get_observation()
-        if self.final_obs:
+        if self._is_final_observation:
             print("final obs inside reset")
             return ts.termination(self._empty_observation(), [0.0])
         return ts.restart(obs, batch_size=self._batch_size)
 
     def is_final_observation(self):
-        return self.final_obs
+        return self._is_final_observation
 
     def set_is_rollout(self, rollout):
-        self.rollout = rollout
+        self.is_rollout = rollout
 
+    # reset the environment to its initial state
     def reset_env(self):
-        self.final_obs = False
-        self.qId = ""
-        self.start_id = ""
-        self.topActions = []
-        self.rollout = False
+        self._is_final_observation = False  # reset the flag of the final observation
+        self.is_rollout = False
+        self._is_episode_ended = False
         self.question_counter = 0
+        self.current_rollout_step = 1
+        self.curr_question_id = ""
+        self.curr_startpoint_id = ""
+        self.topActions = []
+        self.curr_startpoint_id = ""
 
+    def next_question_counter(self):
+        self.question_counter += 1
+
+    def set_current_rollout_step(self, value):
+        self.current_rollout_step = value
 
     def _apply_action(self, action):
         """Appies ´action´ to the Environment
@@ -148,13 +173,27 @@ class RLEnvironment(py_environment.PyEnvironment):
         Returns:
             a float value that is the reward received by the environment.
         """
-        answer = self.paths[self.start_id][action[0].numpy()][2]
+        #possible_answer = self.paths[self.curr_startpoint_id][action[0].numpy()][2]
+        possible_answer = self.paths[self.orig_startpoint_id][action[0].numpy()][2]
+
+        if (self.curr_question_id, self.orig_startpoint_id) not in self.reasoning_paths:
+            self.reasoning_paths[(self.curr_question_id, self.orig_startpoint_id)] = [(self.orig_startpoint_id, action[0].numpy(), possible_answer)]
+        else:
+            self.reasoning_paths[(self.curr_question_id, self.orig_startpoint_id)].append((self.curr_startpoint_id, action[0].numpy(), possible_answer))
 
         # check whether the predicted answer is in the gold answers
-        goldanswers = self.all_answers[self.qId]
-        if answer in goldanswers:
+        gold_answers = self.all_answers[self.curr_question_id]
+        if possible_answer in gold_answers:
+            print(self.question_counter, self.curr_question_id, self.orig_startpoint_id, self.curr_startpoint_id, self.current_rollout_step, action[0].numpy(),
+                  possible_answer, "Correct")
+            self._is_right_answer_found = True
             return [1.0]
         else:
+            # check if possible answer is entity or not, if yes, current episode ends.
+            self.curr_startpoint_id = possible_answer
+            print(self.question_counter, self.curr_question_id, self.orig_startpoint_id, self.curr_startpoint_id,
+                  self.current_rollout_step, action[0].numpy(),
+                  possible_answer, "Wrong")
             if self.alt_reward:
                 return [-1.0]
             return [0.0]
@@ -162,6 +201,14 @@ class RLEnvironment(py_environment.PyEnvironment):
     def _step(self, action):
 
         reward = self._apply_action(action)
-        time_step = ts.termination(self._empty_observation(), reward)
+
+        if self._is_right_answer_found:
+            time_step = ts.termination(self._empty_observation(), reward)
+            self._is_right_answer_found = False
+        else:
+            if self.current_rollout_step >= self.num_rollout_steps:
+                time_step = ts.termination(self._empty_observation(), reward)
+            else:
+                time_step = ts.transition(self._get_observation(), reward, discount=self.discount)
 
         return time_step

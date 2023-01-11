@@ -1,13 +1,19 @@
 from typing import List, Tuple
 from SPARQLWrapper import SPARQLWrapper, JSON
 import urllib
-
+import re
 
 class KnowledgeGraph(object):
 
     def __init__(self, endpoint: str) -> None:
         self.sparql = SPARQLWrapper(endpoint)
         self.sparql.setReturnFormat(JSON)
+
+    def is_entity(self, uri: str) -> bool:
+        raise NotImplementedError()
+
+    def is_predicate(self, uri: str) -> bool:
+        raise NotImplementedError()
 
     def get_entity_name(self, entity: str, lang: str = "en") -> str:
         raise NotImplementedError()
@@ -40,6 +46,7 @@ class KnowledgeGraph(object):
 class FreebaseKG(KnowledgeGraph):
 
     def __init__(self, endpoint: str) -> None:
+        self.name = "freebase"
         super(FreebaseKG, self).__init__(endpoint)
 
     def get_entity_name(self, entity: str, lang: str = "en") -> str:
@@ -370,7 +377,42 @@ class FreebaseKG(KnowledgeGraph):
 class WikidataKG(KnowledgeGraph):
 
     def __init__(self, endpoint: str) -> None:
+        self.name = "wikidata"
         super(WikidataKG, self).__init__(endpoint)
+
+    def is_uri(self, uri):
+        URI_PATTERN = re.compile("[A-z]*://[A-z.-/#]+.*")
+
+        if re.match(URI_PATTERN, uri):
+            return True
+
+        return False
+
+    def is_entity(self, uri: str) -> bool:
+
+        if not self.is_uri(uri):
+            return False
+
+        entity = uri.rsplit("/", 1)[1]
+        ENTITY_PATTERN = re.compile('Q[0-9]+')
+
+        if re.match(ENTITY_PATTERN, entity):
+            return True
+
+        return False
+
+    def is_predicate(self, uri: str) -> bool:
+
+        if not self.is_uri(uri):
+            return False
+
+        predicate = uri.rsplit("/", 1)[1]
+        PREDICATE_PATTERN = re.compile('P[0-9]+')
+
+        if re.match(PREDICATE_PATTERN, predicate):
+            return True
+
+        return False
 
     def get_entity_name(self, entity: str, lang: str = "en") -> str:
         entity = 'wd:' + entity
@@ -479,9 +521,7 @@ class WikidataKG(KnowledgeGraph):
                 PREFIX wdt: <http://www.wikidata.org/prop/direct/>
 
                 SELECT DISTINCT ?r0 ?t0 WHERE {{
-                    {src} ?r0_ ?t0_ .
-                    BIND(STRAFTER(STR(?r0_),STR(wdt:)) AS ?r0)
-                    BIND(STRAFTER(STR(?t0_),STR(wd:)) AS ?t0)
+                    {src} ?r0 ?t0 .
                 }}
                 """
         self.sparql.setQuery(query)
@@ -491,7 +531,32 @@ class WikidataKG(KnowledgeGraph):
             print(query)
             exit(0)
 
-        return [(src, i['r0']['value'], i['t0']['value']) for i in results['results']['bindings'] if i['r0']['value'] != '' and i['t0']['value'] != '']
+        rtn = list()
+
+        for i in results['results']['bindings']:
+            try:
+                if i['r0']['type'] != "uri":
+                    continue
+                if not self.is_predicate(i['r0']['value']):
+                    continue
+
+                predicate = i['r0']['value'].rsplit("/", 1)[1]
+
+                if i['t0']['type'] == "uri":
+                    if not self.is_entity(i['t0']['value']):
+                        continue
+                    tail = i['t0']['value'].rsplit('/', 1)[1]
+                else:
+                    if i['t0']['type'] != "literal":
+                        continue
+                    tail = i['t0']['value']
+
+                rtn.append((src_, predicate, tail))
+            except Exception as e:
+                print(e)
+                print(i)
+
+        return rtn
 
     def get_all_paths(self, src_: str, tgt_: str) -> List[List]:
         src = src_
@@ -629,8 +694,6 @@ class WikidataKG(KnowledgeGraph):
 
         return [(i['r1']['value'], i['r2']['value']) for i in results['results']['bindings']]
 
-
-
 if __name__ == '__main__':
     # freebase = FreebaseKG("https://skynet.coypu.org/freebase/")
     # print(freebase.get_entity_name("m.030qb3t"))
@@ -644,8 +707,11 @@ if __name__ == '__main__':
     # print(wikidata.get_entity_name("Q3624078"))
     # print(wikidata.get_relations("Q3624078"))
     # print(wikidata.get_tails("Q3624078", "P6366"))
-    #print(wikidata.get_single_tail_relation_triple("Q3624078"))
+    # print(wikidata.get_single_tail_relation_triple("Q3624078"))
     print(wikidata.get_one_hop_paths("Q188920"))
     # print(wikidata.get_all_paths("Q188920", "Q135744"))
-    #print(wikidata.search_one_hop_relations("Q188920", "Q32374551"))
-    #print(wikidata.search_two_hop_relations("Q188920", "Q93662"))
+    # print(wikidata.search_one_hop_relations("Q188920", "Q32374551"))
+    # print(wikidata.search_two_hop_relations("Q188920", "Q93662"))
+
+    # print(wikidata.is_entity("http://www.wikidata.org/entity/Q13677"))
+    # print(wikidata.is_predicate("http://www.wikidata.org/prop/direct/P2031"))
